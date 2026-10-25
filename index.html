@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calculadora Shopee</title>
+<style>
+:root{--bg:#fff7f3;--card:#fff;--tx:#222;--mut:#777;--pri:#ee4d2d;--bd:#f0d9d0;--ok:#16803c;--bad:#c62828;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1412;--card:#262019;--tx:#f3ece8;--mut:#a99d96;--bd:#3d322c;--ok:#4ade80;--bad:#f87171;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#1a1412;--card:#262019;--tx:#f3ece8;--mut:#a99d96;--bd:#3d322c;--ok:#4ade80;--bad:#f87171;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif;padding:16px}
+main{max-width:480px;margin:0 auto}
+h1{font-size:22px;margin:8px 0 14px;color:var(--pri)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);font-size:15px}
+.tabs button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input{width:100%;padding:12px;font-size:17px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx)}
+.row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--bd);font-size:15px}
+.row:last-child{border:0}
+.big{font-size:26px;font-weight:700}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.mut{color:var(--mut);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--bd)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>🛒 Calculadora Shopee</h1>
+<div class="tabs" role="tablist">
+  <button id="t1" class="on" role="tab" aria-selected="true">Quanto eu recebo?</button>
+  <button id="t2" role="tab" aria-selected="false">Qual preço cobrar?</button>
+</div>
+
+<div class="card">
+  <div id="m1">
+    <label for="price">Preço de venda (R$)</label>
+    <input id="price" type="text" inputmode="decimal" placeholder="0,00">
+  </div>
+  <div id="m2" class="hide">
+    <label for="margin">Margem de lucro desejada, sobre o preço de venda (%)</label>
+    <input id="margin" type="text" inputmode="decimal" placeholder="20">
+  </div>
+  <label for="cost">Custo do produto (R$)</label>
+  <input id="cost" type="text" inputmode="decimal" placeholder="0,00">
+  <label for="extra">Outros custos por venda: embalagem, frete etc. (R$)</label>
+  <input id="extra" type="text" inputmode="decimal" placeholder="0,00">
+  <label for="tax">Imposto sobre a venda (%)</label>
+  <input id="tax" type="text" inputmode="decimal" placeholder="0">
+  <p class="mut">Os valores ficam salvos neste navegador para a próxima visita.</p>
+</div>
+
+<div class="card" id="out"></div>
+
+<div class="card">
+  <b>Taxas usadas (out/2026)</b>
+  <table id="tbl"></table>
+  <p class="mut">Valores podem mudar. Confira na Shopee e ajuste a lista RATES no código se precisar.</p>
+</div>
+</main>
+<script>
+// min, max, comissão, taxa fixa — edite aqui se a Shopee mudar
+const RATES=[
+ {min:9,max:79.99,c:0.20,f:4.5},
+ {min:80,max:99.99,c:0.14,f:16},
+ {min:100,max:199.99,c:0.14,f:20},
+ {min:200,max:Infinity,c:0.14,f:26}
+];
+const $=id=>document.getElementById(id);
+const R=v=>"R$ "+v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+// aceita "19,90", "19.90" e "1.234,56"; negativos viram 0
+const n=id=>{let v=$(id).value.trim();if(v.includes(","))v=v.replace(/\./g,"").replace(",",".");return Math.max(0,parseFloat(v)||0)};
+const neg=id=>/^\s*-/.test($(id).value);
+const KEY="calcShopee";
+const pc=c=>+(c*100).toFixed(2)+"%";
+let mode=1;
+// a faixa vale do seu min até o min da próxima (sem buracos entre 79,99 e 80)
+function rate(p){for(let i=RATES.length-1;i>=0;i--)if(p>=RATES[i].min)return RATES[i];return RATES[0]}
+$("tbl").innerHTML="<tr><th>Preço</th><th>Comissão</th><th>Taxa fixa</th></tr>"+RATES.map(r=>
+ `<tr><td>${R(r.min)}${r.max===Infinity?" ou mais":" a "+R(r.max)}</td><td>${pc(r.c)}</td><td>${R(r.f)}</td></tr>`).join("");
+function rows(a){return a.map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[2]||""}">${x[1]}</span></div>`).join("")}
+function calc(){
+  const cost=n("cost"),extra=n("extra"),tax=n("tax")/100;
+  const ids=mode===1?["price","cost","extra","tax"]:["margin","cost","extra","tax"];
+  if(ids.some(neg)){$("out").innerHTML='<span class="bad">Use apenas valores positivos.</span>';return}
+  if(mode===1){
+    const p=n("price");
+    if(!p){$("out").innerHTML='<span class="mut">Digite o preço de venda.</span>';return}
+    const r=rate(p);
+    const com=p*r.c,taxaImp=p*tax,net=p-com-r.f;
+    const lucro=net-taxaImp-cost-extra;
+    const mg=lucro/p*100;
+    // zona morta: o topo de uma faixa mais barata pode dar mais lucro que este preço
+    const lucroEm=x=>{const q=rate(x);return x-x*q.c-q.f-x*tax-cost-extra};
+    let melhor=null;
+    for(let i=1;i<RATES.length;i++){
+      const topo=RATES[i].min-0.01;
+      if(topo<p&&lucroEm(topo)>lucro&&(!melhor||lucroEm(topo)>lucroEm(melhor)))melhor=topo;
+    }
+    let aviso=melhor?`<p class="bad">⚠️ Vendendo a ${R(melhor)} você lucraria ${R(lucroEm(melhor))}, mais do que a este preço (a taxa fixa sobe na faixa de ${R(r.min)}).</p>`:"";
+    if(p<RATES[0].min)aviso+=`<p class="bad">⚠️ Preço abaixo de ${R(RATES[0].min)}: a conta usa as taxas da primeira faixa. Confira na Shopee se há regra diferente para produtos desse valor.</p>`;
+    $("out").innerHTML=`<div class="mut">Lucro por venda</div>
+    <div class="big ${lucro>=0?"ok":"bad"}">${R(lucro)} (${mg.toFixed(1)}%)</div>`+aviso+rows([
+     ["Preço de venda",R(p)],
+     [`Comissão (${pc(r.c)})`,"− "+R(com)],
+     ["Taxa fixa","− "+R(r.f)],
+     ["Você recebe da Shopee",R(net),"ok"],
+     ["Imposto","− "+R(taxaImp)],
+     ["Custo + outros","− "+R(cost+extra)]]);
+  }else{
+    const m=n("margin")/100;
+    if(!cost&&!extra){$("out").innerHTML='<span class="mut">Digite o custo do produto.</span>';return}
+    let found=null;
+    for(const r of RATES){
+      const d=1-r.c-tax-m; if(d<=0)continue;
+      // arredonda antes de conferir a faixa: 79,995 vira 80,00 e cai na faixa seguinte
+      const p=Math.ceil((cost+extra+r.f)/d*100)/100;
+      if(rate(p)===r){found={p,r};break}
+    }
+    if(!found){$("out").innerHTML='<span class="bad">Não foi possível atingir essa margem. Tente reduzir a margem.</span>';return}
+    const {p,r}=found;
+    const lucro=p-p*r.c-r.f-p*tax-cost-extra;
+    $("out").innerHTML=`<div class="mut">Preço mínimo para sua margem</div>
+    <div class="big ok">${R(p)}</div>`+rows([
+     [`Comissão (${pc(r.c)})`,"− "+R(p*r.c)],
+     ["Taxa fixa","− "+R(r.f)],
+     ["Imposto","− "+R(p*tax)],
+     ["Custo + outros","− "+R(cost+extra)],
+     ["Lucro",R(lucro)+" ("+(lucro/p*100).toFixed(1)+"%)","ok"]]);
+  }
+}
+function save(){
+  try{const s={mode};document.querySelectorAll("input").forEach(i=>s[i.id]=i.value);localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}
+}
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY))||{};document.querySelectorAll("input").forEach(i=>{if(typeof s[i.id]==="string")i.value=s[i.id]});return s.mode===2?2:1}catch(e){return 1}
+}
+function setMode(m){mode=m;$("t1").className=m===1?"on":"";$("t2").className=m===2?"on":"";
+ $("t1").setAttribute("aria-selected",m===1);$("t2").setAttribute("aria-selected",m===2);
+ $("m1").className=m===1?"":"hide";$("m2").className=m===2?"":"hide";calc();save()}
+$("t1").onclick=()=>setMode(1);$("t2").onclick=()=>setMode(2);
+document.querySelectorAll("input").forEach(i=>i.addEventListener("input",()=>{calc();save()}));
+setMode(load());
+</script>
+</body>
+</html>
